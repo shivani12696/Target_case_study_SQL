@@ -1,4 +1,4 @@
-# Problem: What does 'good' look like? 
+# WHAT DOES GOOD LOOK LIKE:  
 # Import the dataset and do usual exploratory analysis steps like checking the structure & 
 # characteristics of the dataset: 
 # Data type of all columns in the "customers" table. 
@@ -66,7 +66,8 @@ select y.time_, count(*) as no_of_order_placed from
 group by y.time_ 
 order by no_of_order_placed desc 
 
-# Problem: Evolution of E-commerce orders in the Brazil region: Get the month on month no. of orders placed in each state.  
+# EVOLUTION OF E-COMMERCE IN THE BRAZIL REGION: 
+# Get the month on month no. of orders placed in each state.  
 
 select c.customer_state, extract(month from o.order_purchase_timestamp) as Month, 
 format_datetime("%B", o.order_purchase_timestamp) as month_name, 
@@ -84,7 +85,7 @@ select customer_state, count(customer_id) as no_of_customers from
 group by customer_state  
 order by no_of_customers desc
 
-# Problem: Impact on Economy: Analyse the money movement by e-commerce by looking at order prices, freight and others.  
+# IMPACT ON ECONOMY: ANALYSE THE MONEY MOVEMENT BY E-COMMERCE BY LOOKING AT ORDER PRICES, FREIGHT AND OTHERS.   
 
 # Get the % increase in the cost of orders from year 2017 to 2018 (include months between Jan to Aug only). You can use the "payment_value" column in the payments table to get the cost of # orders.
 
@@ -107,6 +108,135 @@ SELECT
 SUM(CASE WHEN order_year = 2017 THEN total_payment_value ELSE 0 END) 
 * 100 AS percentage_increase 
 FROM order_costs; 
+
+# Calculate the Total & Average value of order price for each state.  
+
+select c.customer_state, round(sum(p.payment_value), 2) as total_price, 
+round(avg(p.payment_value), 2) as average_value 
+from `sqlproject.customers` c  
+inner join `sqlproject.orders` o  
+using(customer_id)  
+inner join `sqlproject.payments` p 
+using(order_id)  
+group by c.customer_state 
+order by total_price desc  
+
+#  Calculate the Total & Average value of order freight for each state. 
+
+select c.customer_state, round(sum(ot.freight_value), 2) as total_freight_value, 
+round(avg(ot.freight_value), 2) as average_freight_value 
+from `sqlproject.customers` c 
+inner join `sqlproject.orders` o  
+using(customer_id) 
+inner join `sqlproject.order_items` ot  
+using(order_id) 
+group by c.customer_state  
+order by total_freight_value desc   
+
+# ANALYSIS BASED ON SALES, FREIGHT, AND DELIVERY TIME. 
+
+# Find the no. of days taken to deliver each order from the order’s purchase date as delivery time. Also, calculate the difference (in days) between the estimated & actual delivery date of # an order. 
+# Do this in a single query. You can calculate the delivery time and the difference between the estimated & actual delivery date using the given formula: 
+# 	a. time_to_deliver = order_delivered_customer_date - order_purchase_timestamp 
+# 	b. diff_estimated_delivery = order_delivered_customer_date - order_estimated_delivery_date
+
+select  order_id,   
+date_diff(order_delivered_customer_date, order_purchase_timestamp, day) as 
+time_to_deliver,  
+date_diff(order_delivered_customer_date, order_estimated_delivery_date, day) as 
+diff_estimated_delivery 
+from `sqlproject.orders` 
+
+# Find out the top 5 states with the highest & lowest average freight value.  
+
+(SELECT c.customer_state, round(AVG(oi.freight_value), 2) AS avg_freight 
+FROM `sqlproject.customers` c 
+JOIN 
+`sqlproject.orders` o 
+using(customer_id)  
+JOIN 
+`sqlproject.order_items` oi 
+using(order_id) 
+group by c.customer_state  
+order by avg_freight desc limit 5)   
+union all   
+(SELECT c.customer_state, round(AVG(oi.freight_value), 3) AS lowest_avg_freight 
+FROM `sqlproject.customers` c 
+JOIN 
+`sqlproject.orders` o 
+using(customer_id)  
+JOIN 
+`sqlproject.order_items` oi 
+using(order_id) 
+group by c.customer_state  
+order by lowest_avg_freight asc limit 5)  
+
+# Find out the top 5 states with the highest & lowest average delivery time. 
+# Highest delivery_time (in Days):   
+
+select c.customer_state, 
+round(avg(date_diff(order_delivered_customer_date, 
+order_purchase_timestamp, day)), 2) as highest_delivery_time 
+from `sqlproject.customers` c 
+join `sqlproject.orders` o 
+using(customer_id)  
+group by c.customer_state  
+order by highest_delivery_time desc 
+limit 5  
+
+# Lowest delivery time (in Days):   
+
+select c.customer_state, 
+round(avg(date_diff(order_delivered_customer_date, 
+order_purchase_timestamp, day)), 2) as lowest_delivery_time 
+from `sqlproject.customers` c 
+join `sqlproject.orders` o 
+using(customer_id)  
+group by c.customer_state  
+order by lowest_delivery_time asc 
+limit 5 
+
+# Find out the top 5 states where the order delivery is really fast as compared to the estimated date of delivery. You can use the difference between the averages of actual & estimated
+# delivery date to figure out how fast the delivery was for each state. 
+
+select customer_state, round(estimated_days-delivered_days, 2) as 
+fastest_days_taken from  
+(select c.customer_state,  
+round(avg(date_diff(o.order_delivered_customer_date, 
+o.order_purchase_timestamp, day)), 2) as delivered_days, 
+round(avg(date_diff(o.order_estimated_delivery_date, 
+o.order_purchase_timestamp, day)), 2) as estimated_days 
+from `sqlproject.customers` c 
+inner join `sqlproject.orders` o 
+using(customer_id) 
+where o.order_purchase_timestamp is Not NULL  
+and o.order_delivered_customer_date is Not NULL  
+and o.order_estimated_delivery_date is Not NULL  
+group by c.customer_state ) x 
+order by estimated_days-delivered_days desc limit 5 
+
+# ANALYSIS BASED ON THE PAYMENTS.  
+
+# Find the month on month no. of orders placed using different payment types. 
+
+select extract(month from o.order_purchase_timestamp) as month, 
+format_datetime("%B", o.order_purchase_timestamp) as month_name, 
+p.payment_type, count(o.order_id) as orders_placed 
+from `sqlproject.orders` o 
+inner join `sqlproject.payments` p 
+using(order_id) 
+group by month, month_name, p.payment_type 
+order by month  
+
+# Find the no. of orders placed on the basis of the payment instalments that have been paid.  
+
+select payment_installments, count(order_id) as no_of_orders 
+from `sqlproject.payments` 
+group by payment_installments 
+
+
+
+
 
 
 
